@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { forwardRef, type ComponentType } from "react"
 
 type FormState = "mail" | "otp" | "mail error" | "otp error"
@@ -14,14 +14,17 @@ declare global {
     }
 }
 
-const FormVariationContext = createContext<FormVariationContextType | null>(null)
+const FormVariationContext = createContext<FormVariationContextType | null>(
+    null
+)
 const mailBoundForms = new WeakSet<HTMLFormElement>()
 const otpBoundForms = new WeakSet<HTMLFormElement>()
 
 // Higher-Order Component to provide form variation context
 export function withFormVariationSwitcher(Component): ComponentType {
     return forwardRef((props, ref) => {
-        const [currentFormState, setCurrentFormState] = useState<FormState>("mail")
+        const [currentFormState, setCurrentFormState] =
+            useState<FormState>("mail")
 
         function setRefs(node: HTMLElement | null) {
             if (typeof ref === "function") {
@@ -34,7 +37,11 @@ export function withFormVariationSwitcher(Component): ComponentType {
             <FormVariationContext.Provider
                 value={{ currentFormState, setCurrentFormState }}
             >
-                <Component ref={setRefs} {...props} variant={currentFormState} />
+                <Component
+                    ref={setRefs}
+                    {...props}
+                    variant={currentFormState}
+                />
             </FormVariationContext.Provider>
         )
     })
@@ -45,24 +52,48 @@ export function withMailSend(Component): ComponentType {
     return forwardRef((props, ref) => {
         const context = useContext(FormVariationContext)
         const setCurrentFormState = context?.setCurrentFormState ?? (() => undefined)
+        const currentFormState = context?.currentFormState ?? "mail"
+        const formRef = useRef<HTMLFormElement | null>(null)
+
+        useEffect(() => {
+            const formInstance = formRef.current
+            if (!formInstance) return
+
+            const shouldDisable =
+                currentFormState === "otp" || currentFormState === "otp error"
+
+            formInstance.querySelectorAll("input, button").forEach((el) => {
+                if (
+                    el instanceof HTMLInputElement ||
+                    el instanceof HTMLButtonElement
+                ) {
+                    el.disabled = shouldDisable
+                }
+            })
+        }, [currentFormState])
 
         function setRefs(node: HTMLElement | null) {
             const formInstance = node?.closest("form") as HTMLFormElement | null
-            formMailSendFun({ formInstance, setCurrentFormState, })
-            
+            formRef.current = formInstance
+            formMailSendFun({
+                formInstance,
+                setCurrentFormState,
+            })
+
             if (typeof ref === "function") {
                 ref(node)
             } else if (ref) {
                 ref.current = node
             }
         }
-        return (
-            <Component ref={setRefs} {...props} />
-        )
+        return <Component ref={setRefs} {...props} />
     })
 }
 
-function formMailSendFun({ formInstance, setCurrentFormState, }: {
+function formMailSendFun({
+    formInstance,
+    setCurrentFormState,
+}: {
     formInstance: HTMLFormElement | null
     setCurrentFormState: (value: FormState) => void
 }) {
@@ -74,27 +105,28 @@ function formMailSendFun({ formInstance, setCurrentFormState, }: {
         e.preventDefault()
         const formData = new FormData(formInstance)
 
-            const options = {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({sEmail: formData.get("sEmail")}),
-            }
-            // Send OTP request
-            fetch("https://api.paperless.tax/users/account/sendotp", options)
-            .then(response => response.json())
-            .then(result => {
-                if(result?.iStatus != 1){
+        const options = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sEmail: formData.get("sEmail") }),
+        }
+        // Send OTP request
+        fetch("https://api.paperless.tax/users/account/sendotp", options)
+            .then((response) => response.json())
+            .then((result) => {
+                if (result?.iStatus != 1) {
                     window.sMail = String(formData.get("sEmail") ?? "")
                     setCurrentFormState("otp")
-                }else{
+                } else {
                     setCurrentFormState("mail error")
                 }
                 console.log(result?.sMessage)
-            }).catch(error => {
+            })
+            .catch((error) => {
                 console.error("Error:", error)
                 setCurrentFormState("mail error")
             })
-        })
+    })
 }
 
 export function withOtpSend(Component): ComponentType {
@@ -116,9 +148,7 @@ export function withOtpSend(Component): ComponentType {
                 ref.current = node
             }
         }
-        return (
-            <Component ref={setRefs} {...props} />
-        )
+        return <Component ref={setRefs} {...props} />
     })
 }
 
@@ -139,53 +169,26 @@ function formOtpSendFun({
 
         const options = {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({sEmail: window.sMail, sOTP: formData.get("sOTP")}),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                sEmail: window.sMail,
+                sOTP: formData.get("sOTP"),
+            }),
         }
         // Send OTP verification request
         fetch("https://api.paperless.tax/users/account/loginweb", options)
-        .then(response => response.json())
-        .then(result => {
-            if(result?.iStatus != 1){
-                console.log(result)
-                if(result?.sURL) window.location.href = result?.sURL
-            } else {
-                setCurrentFormState("otp error")
-            }
-        }).catch(error => {
-            console.error("Error:", error)
-            setCurrentFormState("otp error")
-        })
-    })
-}
-
-export function makeFieldReadOnly(Component): ComponentType {
-    return forwardRef((props, ref) => {
-        function setRefs(node: HTMLElement | null) {
-            if (node) {
-                const directField =
-                    node instanceof HTMLInputElement ||
-                    node instanceof HTMLTextAreaElement
-                        ? node
-                        : null
-
-                const nestedField = node.querySelector("input, textarea")
-                const targetField = directField ?? nestedField
-
-                if (targetField) {
-                    targetField.readOnly = true
-                    targetField.setAttribute("aria-readonly", "true")
+            .then((response) => response.json())
+            .then((result) => {
+                if (result?.iStatus != 1) {
+                    console.log(result)
+                    if (result?.sURL) window.location.href = result?.sURL
+                } else {
+                    setCurrentFormState("otp error")
                 }
-            }
-
-            if (typeof ref === "function") {
-                ref(node)
-            } else if (ref) {
-                ref.current = node
-            }
-        }
-        return (
-            <Component ref={setRefs} {...props} />
-        )
+            })
+            .catch((error) => {
+                console.error("Error:", error)
+                setCurrentFormState("otp error")
+            })
     })
 }

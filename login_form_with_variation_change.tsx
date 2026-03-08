@@ -113,3 +113,34 @@ function formOtpSendFun({formInstance, currentFormState, setCurrentFormState}){
         });
     });
 }
+
+export function makeFieldReadOnly(Component): ComponentType {
+    return forwardRef((props, ref) => {
+        function setRefs(node: HTMLElement | null) {
+            if (node) {
+                const directField =
+                    node instanceof HTMLInputElement ||
+                    node instanceof HTMLTextAreaElement
+                        ? node
+                        : null
+
+                const nestedField = node.querySelector("input, textarea")
+                const targetField = directField ?? nestedField
+
+                if (targetField) {
+                    targetField.readOnly = true
+                    targetField.setAttribute("aria-readonly", "true")
+                }
+            }
+
+            if (typeof ref === "function") {
+                ref(node)
+            } else if (ref) {
+                ref.current = node
+            }
+        }
+        return (
+            <Component ref={setRefs} {...props} />
+        )
+    })
+}
