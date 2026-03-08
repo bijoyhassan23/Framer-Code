@@ -61,7 +61,7 @@ export function withMailSend(Component): ComponentType {
 
             const shouldDisable =
                 currentFormState === "otp" || currentFormState === "otp error"
-
+ 
             formInstance.querySelectorAll("input, button").forEach((el) => {
                 if (
                     el instanceof HTMLInputElement ||
