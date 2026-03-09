@@ -6,6 +6,8 @@ type FormState = "mail" | "otp" | "mail error" | "otp error"
 type FormVariationContextType = {
     currentFormState: FormState
     setCurrentFormState: (value: FormState) => void
+    statusMessage: string
+    setStatusMessage: (value: string) => void
 }
 
 declare global {
@@ -25,6 +27,7 @@ export function withFormVariationSwitcher(Component): ComponentType {
     return forwardRef((props, ref) => {
         const [currentFormState, setCurrentFormState] =
             useState<FormState>("mail")
+        const [statusMessage, setStatusMessage] = useState("")
 
         function setRefs(node: HTMLElement | null) {
             if (typeof ref === "function") {
@@ -35,7 +38,12 @@ export function withFormVariationSwitcher(Component): ComponentType {
         }
         return (
             <FormVariationContext.Provider
-                value={{ currentFormState, setCurrentFormState }}
+                value={{
+                    currentFormState,
+                    setCurrentFormState,
+                    statusMessage,
+                    setStatusMessage,
+                }}
             >
                 <Component
                     ref={setRefs}
@@ -52,6 +60,7 @@ export function withMailSend(Component): ComponentType {
     return forwardRef((props, ref) => {
         const context = useContext(FormVariationContext)
         const setCurrentFormState = context?.setCurrentFormState ?? (() => undefined)
+        const setStatusMessage = context?.setStatusMessage ?? (() => undefined)
         const currentFormState = context?.currentFormState ?? "mail"
         const formRef = useRef<HTMLFormElement | null>(null)
 
@@ -78,6 +87,7 @@ export function withMailSend(Component): ComponentType {
             formMailSendFun({
                 formInstance,
                 setCurrentFormState,
+                setStatusMessage,
             })
 
             if (typeof ref === "function") {
@@ -93,9 +103,11 @@ export function withMailSend(Component): ComponentType {
 function formMailSendFun({
     formInstance,
     setCurrentFormState,
+    setStatusMessage,
 }: {
     formInstance: HTMLFormElement | null
     setCurrentFormState: (value: FormState) => void
+    setStatusMessage: (value: string) => void
 }) {
     if (!formInstance || mailBoundForms.has(formInstance)) return
 
@@ -116,14 +128,17 @@ function formMailSendFun({
             .then((result) => {
                 if (result?.iStatus != 1) {
                     window.sMail = String(formData.get("sEmail") ?? "")
+                    setStatusMessage(String(result?.sMessage ?? ""))
                     setCurrentFormState("otp")
                 } else {
+                    setStatusMessage(String(result?.sMessage ?? ""))
                     setCurrentFormState("mail error")
                 }
                 console.log(result?.sMessage)
             })
             .catch((error) => {
                 console.error("Error:", error)
+                setStatusMessage("")
                 setCurrentFormState("mail error")
             })
     })
@@ -134,12 +149,14 @@ export function withOtpSend(Component): ComponentType {
         const context = useContext(FormVariationContext)
         const setCurrentFormState =
             context?.setCurrentFormState ?? (() => undefined)
+        const setStatusMessage = context?.setStatusMessage ?? (() => undefined)
 
         function setRefs(node: HTMLElement | null) {
             const formInstance = node?.closest("form") as HTMLFormElement | null
             formOtpSendFun({
                 formInstance,
                 setCurrentFormState,
+                setStatusMessage,
             })
 
             if (typeof ref === "function") {
@@ -155,9 +172,11 @@ export function withOtpSend(Component): ComponentType {
 function formOtpSendFun({
     formInstance,
     setCurrentFormState,
+    setStatusMessage,
 }: {
     formInstance: HTMLFormElement | null
     setCurrentFormState: (value: FormState) => void
+    setStatusMessage: (value: string) => void
 }) {
     if (!formInstance || otpBoundForms.has(formInstance)) return
 
@@ -179,7 +198,9 @@ function formOtpSendFun({
         fetch("https://api.paperless.tax/users/account/loginweb", options)
             .then((response) => response.json())
             .then((result) => {
-                if (result?.iStatus != 1) {
+                setStatusMessage(String(result?.sMessage ?? ""))
+
+                if (result?.iStatus != 1 && result?.sURL) {
                     console.log(result)
                     if (result?.sURL) window.location.href = result?.sURL
                 } else {
@@ -188,7 +209,23 @@ function formOtpSendFun({
             })
             .catch((error) => {
                 console.error("Error:", error)
+                setStatusMessage("")
                 setCurrentFormState("otp error")
             })
     })
+}
+
+// Override for text layers: uses window.sMessage when available.
+export function withWindowMessageText(Component): ComponentType {
+    return (props) => {
+        const context = useContext(FormVariationContext)
+        const message = context?.statusMessage?.trim() ?? ""
+
+        if (!message) {
+            // Keep original/default text when there is no message.
+            return <Component {...props} />
+        }
+
+        return <Component {...props} text={message} />
+    }
 }
