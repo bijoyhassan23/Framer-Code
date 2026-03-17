@@ -11,9 +11,7 @@ export function withFormSend(Component): ComponentType {
                 ref.current = node
             }
         }
-        return (
-            <Component ref={setRefs} {...props} whileHover={{ scale: 1.05 }} />
-        )
+        return <Component ref={setRefs} {...props} />
     })
 }
 
@@ -22,7 +20,7 @@ function formSendFun(formInstance) {
         e.preventDefault()
 
         const formData = new FormData(formInstance)
-
+        const getErrorMessage = document.querySelector("#error_message > p");
         const payload = {
             sName: formData.get("sName"),
             sEmail: formData.get("sEmail"),
@@ -45,15 +43,33 @@ function formSendFun(formInstance) {
             const result = await response.json()
 
             // If success and redirect exists
-            if (response.ok && result.sRedirect) {
+            if (response.ok && result.sRedirect && isValidUrl(result.sRedirect)) {
                 console.log("Send Success Full")
                 console.log(result)
+                window.location.href = result.sRedirect;
             } else {
-                alert(result.sMessage || "Something went wrong")
+                if (result?.sMessage) {
+                    getErrorMessage.textContent = result.sMessage
+                }else if (result?.sRedirect) {
+                    getErrorMessage.textContent = result.sRedirect
+                }else{
+                    getErrorMessage.textContent = "An error occurred. Please try again."
+                }
+                getErrorMessage.setAttribute("show_status", "true");
             }
         } catch (error) {
             console.error("Error:", error)
-            alert("Server error. Please try again.")
+            getErrorMessage.textContent = "An error occurred. Please try again."
+            getErrorMessage.setAttribute("show_status", "true");
         }
     })
+}
+
+function isValidUrl(str) {
+  try {
+    new URL(str);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
